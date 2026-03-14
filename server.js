@@ -1,17 +1,10 @@
-const ADMIN_PASSWORD = "spices_admin_2026"; // Change this to your secret password
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http, { cors: { origin: "*" } });
 
-io.on('connection', (socket) => {
-    // ... existing logic ...
+// --- PASTE YOUR spiceCatalog AND auctionState HERE ---
 
-    socket.on('adminAction', (data) => {
-        if (data.password === ADMIN_PASSWORD) {
-            if (data.action === 'next') {
-                moveToNextLot(); // Your existing function to change lots
-            } else if (data.action === 'reset') {
-                resetCurrentAuction();
-            }
-        } else {
-            socket.emit('error', 'Invalid Admin Password!');
-        }
-    });
+http.listen(process.env.PORT || 10000, () => {
+    console.log('Server is running...');
 });
