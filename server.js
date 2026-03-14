@@ -1,37 +1,26 @@
-// Add these to your global variables in server.js
-let pendingBuyers = [];
-let approvedBuyers = {}; // Stores { username: password }
+// Modify the adminAction listener in your server.js
+socket.on('adminAction', (data) => {
+    if (data.password === ADMIN_PASSWORD && data.action === 'approve_buyer') {
+        const buyer = pendingBuyers.find(b => b.username === data.targetUser);
+        if (buyer) {
+            // Assign the custom limit or default to 10 Lakhs
+            const assignedLimit = data.limit || 1000000; 
+            
+            approvedBuyers[buyer.username] = {
+                approved: true,
+                limit: assignedLimit,
+                spent: 0
+            };
 
-io.on('connection', (socket) => {
-    // Handling Registration
-    socket.on('registerBuyer', (data) => {
-        // Check if buyer already exists
-        if (approvedBuyers[data.username]) {
-            return socket.emit('error', 'Username already registered.');
+            pendingBuyers = pendingBuyers.filter(b => b.username !== data.targetUser);
+            
+            // Inform the specific buyer of their limit
+            io.to(buyer.id).emit('buyerApproved', {
+                username: buyer.username,
+                limit: assignedLimit
+            });
+            
+            io.emit('newRegistrationRequest', pendingBuyers);
         }
-        
-        pendingBuyers.push({
-            id: socket.id,
-            username: data.username,
-            company: data.company,
-            gst: data.gst
-        });
-        
-        // Notify Admin of a new request
-        io.emit('newRegistrationRequest', pendingBuyers);
-        socket.emit('status', 'Registration pending admin approval...');
-    });
-
-    // Admin Approval Logic
-    socket.on('adminAction', (data) => {
-        if (data.password === ADMIN_PASSWORD && data.action === 'approve_buyer') {
-            const buyer = pendingBuyers.find(b => b.username === data.targetUser);
-            if (buyer) {
-                approvedBuyers[buyer.username] = true;
-                pendingBuyers = pendingBuyers.filter(b => b.username !== data.targetUser);
-                io.emit('buyerApproved', buyer.username);
-                io.emit('newRegistrationRequest', pendingBuyers); // Update admin list
-            }
-        }
-    });
+    }
 });
