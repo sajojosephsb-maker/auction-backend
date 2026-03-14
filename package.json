@@ -1,16 +1,5 @@
-{
-  "name": "auction-backend",
-  "version": "1.0.0",
-  "description": "Socket.io server for live bidding",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-  "express": "^4.18.2",
-  "socket.io": "^4.6.1",
-  "json2csv": "^6.0.0-alpha.2",
-  "pdfkit": "^0.13.0",
-  "nodemailer": "^6.9.3"
-}
+"dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "mongoose": "^8.0.0"
 }
