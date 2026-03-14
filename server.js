@@ -3,8 +3,8 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http, { cors: { origin: "*" } });
 
-// --- PASTE YOUR spiceCatalog AND auctionState HERE ---
+// All your spiceCatalog, auctionState, and socket.on logic goes here...
 
 http.listen(process.env.PORT || 10000, () => {
-    console.log('Server is running...');
+    console.log('Server running on port 10000');
 });
