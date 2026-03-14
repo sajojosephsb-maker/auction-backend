@@ -1,15 +1,19 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
+// Add this to your global variables
+let lotHistory = [];
 
-const ADMIN_PASSWORD = "spices_admin_2026";
-let pendingBuyers = [];
-let approvedBuyers = {};
-let auctionState = { currentLot: "None", highestBid: 0, timeLeft: 0 };
+// Inside your timer/sold logic in server.js:
+if (auctionState.timeLeft === 0) {
+    auctionState.isEnded = true;
+    
+    const completedLot = {
+        lot: auctionState.currentLot,
+        price: auctionState.highestBid,
+        bidder: auctionState.highestBidder
+    };
 
-// ... Paste your socket.on('adminAction') and other logic here ...
+    lotHistory.unshift(completedLot); // Add to the start of the list
+    if (lotHistory.length > 5) lotHistory.pop(); // Keep only last 5
 
-http.listen(process.env.PORT || 10000, () => {
-    console.log('Server is live and stable.');
-});
+    io.emit('updateLotHistory', lotHistory);
+    io.emit('auctionEnded', auctionState);
+}
