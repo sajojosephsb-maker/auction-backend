@@ -4,24 +4,22 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http, { cors: { origin: "*" } });
 const mongoose = require('mongoose');
 
-// DB Connection
 mongoose.connect(process.env.MONGO_URI).then(() => console.log("Cloud DB Connected"));
 
 const SaleSchema = new mongoose.Schema({ lot: String, buyer: String, rate: Number, weight: Number, date: { type: Date, default: Date.now } });
 const Sale = mongoose.model('Sale', SaleSchema);
 
-// Data Storage
-let authorizedBidders = { "BID-001": "Sajo Joseph", "BID-002": "Puttady Trader", "BID-003": "Spice King" };
+let authorizedBidders = { "BID-001": "Sajo Joseph", "BID-002": "Puttady Trader" };
 let salesHistory = [];
 let auctionState = { currentLot: "IDLE", highestBid: 0, highestBidder: "No Bids", timeLeft: 0, isEnded: true, videoUrl: "" };
 let auctionCatalogue = [];
 let currentLotIndex = 0;
 
-// Report Download Route
+// 📥 CSV Report Download
 app.get('/download-report', async (req, res) => {
     const allSales = await Sale.find().sort({ date: -1 });
     let csv = "Lot,Buyer,Rate,Weight,Total\n";
-    allSales.forEach(s => csv += `${s.lot},${s.buyer},${s.rate},${s.weight || 0},${((s.rate||0) * (s.weight||0)).toFixed(2)}\n`);
+    allSales.forEach(s => csv += `${s.lot},${s.buyer},${s.rate},${s.weight || 0},${(s.rate * (s.weight || 0)).toFixed(2)}\n`);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=report.csv');
     res.send(csv);
@@ -30,17 +28,22 @@ app.get('/download-report', async (req, res) => {
 io.on('connection', (socket) => {
     socket.emit('updateBid', { ...auctionState, history: salesHistory });
 
-    socket.on('getMyWins', (userId) => {
-        const bidderName = authorizedBidders[userId];
-        const myWins = salesHistory.filter(s => s.buyer === bidderName);
-        socket.emit('myWinsResult', myWins);
+    // 👤 Registration Logic
+    socket.on('registerUser', (data) => {
+        const newId = "BID-" + Math.floor(100 + Math.random() * 900);
+        authorizedBidders[newId] = data.name;
+        socket.emit('registrationSuccess', { id: newId, name: data.name });
+    });
+
+    // 🔍 Lot Search
+    socket.on('searchLot', (lotNum) => {
+        const found = auctionCatalogue.find(item => item.lotNumber === lotNum);
+        socket.emit('searchResult', found || { error: "Lot not found" });
     });
 
     socket.on('uploadCatalogue', (data) => {
         if (data.password === "spices_admin_2026") {
-            auctionCatalogue = data.list;
-            currentLotIndex = 0;
-            startLot(0);
+            auctionCatalogue = data.list; currentLotIndex = 0; startLot(0);
         }
     });
 
@@ -59,12 +62,15 @@ io.on('connection', (socket) => {
         io.emit('receiveChat', { user: sender, msg: data.msg });
     });
 
+    socket.on('getMyWins', (userId) => {
+        const name = authorizedBidders[userId];
+        socket.emit('myWinsResult', salesHistory.filter(s => s.buyer === name));
+    });
+
     socket.on('adminAction', (data) => {
         if (data.password === "spices_admin_2026") {
-            if (data.action === 'RESET_ALL') {
-                salesHistory = [];
-                auctionState = { currentLot: "IDLE", highestBid: 0, highestBidder: "No Bids", timeLeft: 0, isEnded: true };
-            } else { auctionState.timeLeft = 0; }
+            if (data.action === 'RESET_ALL') { salesHistory = []; auctionState.highestBid = 0; }
+            else { auctionState.timeLeft = 0; }
             io.emit('updateBid', { ...auctionState, history: salesHistory });
         }
     });
@@ -82,14 +88,10 @@ setInterval(async () => {
         if (auctionState.timeLeft === 0) {
             auctionState.isEnded = true;
             if (auctionState.highestBidder !== "No Bids") {
-                const newSale = { lot: auctionState.currentLot, buyer: auctionState.highestBidder, rate: auctionState.highestBid, weight: auctionState.weight };
-                salesHistory.unshift(newSale);
-                await new Sale(newSale).save();
+                const sale = { lot: auctionState.currentLot, buyer: auctionState.highestBidder, rate: auctionState.highestBid, weight: auctionState.weight };
+                salesHistory.unshift(sale); await new Sale(sale).save();
             }
-            setTimeout(() => {
-                currentLotIndex++;
-                if (currentLotIndex < auctionCatalogue.length) startLot(currentLotIndex);
-            }, 3000);
+            setTimeout(() => { currentLotIndex++; if (currentLotIndex < auctionCatalogue.length) startLot(currentLotIndex); }, 3000);
         }
         io.emit('updateBid', { ...auctionState, history: salesHistory });
     }
