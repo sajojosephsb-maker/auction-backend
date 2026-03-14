@@ -1,18 +1,59 @@
-// Add this inside your timer (timeLeft === 0) block in server.js
-if (auctionState.timeLeft === 0 && auctionState.highestBidder !== "No Bids") {
-    const qty = auctionState.specs.totalWeight;
-    const bidVal = auctionState.highestBid * qty;
-    const netPayable = (bidVal + (bidVal * 0.01)) * 1.05;
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http, { cors: { origin: "*" } });
 
-    const alertMessage = `🚀 Lot Won! 
-Lot: ${auctionState.currentLot}
-Rate: ₹${auctionState.highestBid}
-Net Payable: ₹${netPayable.toLocaleString('en-IN')}
-Please check your Ledger for details.`;
+const ADMIN_PASSWORD = "spices_admin_2026";
+let allTransactions = []; 
+let auctionState = {
+    currentLot: "LOT-101: Bold Cardamom",
+    highestBid: 1200,
+    highestBidder: "No Bids",
+    timeLeft: 60,
+    isEnded: false,
+    specs: { totalWeight: 600 },
+    videoUrl: "" // Holds the live stream link
+};
 
-    // Trigger the notification event
-    io.emit('sendNotification', {
-        target: auctionState.highestBidder,
-        message: alertMessage
+io.on('connection', (socket) => {
+    socket.emit('updateBid', auctionState);
+
+    // Admin Video Control
+    socket.on('updateVideo', (data) => {
+        if (data.password === ADMIN_PASSWORD) {
+            auctionState.videoUrl = data.url;
+            io.emit('updateBid', auctionState);
+        }
     });
-}
+
+    socket.on('placeBid', (data) => {
+        if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
+            auctionState.highestBid = data.amount;
+            auctionState.highestBidder = data.bidderName;
+            if (auctionState.timeLeft < 10) auctionState.timeLeft = 10;
+            io.emit('updateBid', auctionState);
+        }
+    });
+});
+
+setInterval(() => {
+    if (auctionState.timeLeft > 0 && !auctionState.isEnded) {
+        auctionState.timeLeft--;
+        io.emit('timerUpdate', auctionState.timeLeft);
+        if (auctionState.timeLeft === 0) {
+            auctionState.isEnded = true;
+            
+            // Winner Notification Logic
+            if (auctionState.highestBidder !== "No Bids") {
+                const netPayable = (auctionState.highestBid * auctionState.specs.totalWeight * 1.01) * 1.05;
+                io.emit('sendNotification', {
+                    target: auctionState.highestBidder,
+                    message: `🔨 WON: ${auctionState.currentLot}\nRate: ₹${auctionState.highestBid}\nTotal: ₹${netPayable.toFixed(2)}`
+                });
+            }
+            io.emit('auctionEnded', auctionState);
+        }
+    }
+}, 1000);
+
+http.listen(process.env.PORT || 10000, () => { console.log('Full System Live'); });
