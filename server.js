@@ -1,30 +1,22 @@
-// --- AUTHENTICATION STORAGE ---
-let authorizedBidders = [
-    { id: "BID001", pass: "1234", name: "John Cardamom Traders" },
-    { id: "BID002", pass: "5678", name: "Spices Export Ltd" }
-];
+let activeSessions = {}; // Stores { socketId: { name: "User", loginTime: Date } }
 
 io.on('connection', (socket) => {
-    // Admin creates or edits a bidder
-    socket.on('adminAction', (data) => {
-        if (data.password !== ADMIN_PASSWORD) return;
-
-        if (data.action === 'CREATE_USER') {
-            authorizedBidders.push({ id: data.bidId, pass: data.bidPass, name: data.bidName });
-            console.log(`User ${data.bidName} Created`);
-        } else if (data.action === 'EDIT_USER') {
-            let user = authorizedBidders.find(u => u.id === data.bidId);
-            if (user) { user.pass = data.bidPass; user.name = data.bidName; }
-        }
-    });
-
-    // Login Verification
     socket.on('loginAttempt', (data) => {
         const user = authorizedBidders.find(u => u.id === data.id && u.pass === data.pass);
         if (user) {
+            // Record the active session
+            activeSessions[socket.id] = {
+                name: user.name,
+                id: user.id,
+                loginTime: new Date().toLocaleTimeString()
+            };
             socket.emit('loginResponse', { success: true, name: user.name });
-        } else {
-            socket.emit('loginResponse', { success: false, message: "Invalid ID or Password" });
+            io.emit('updateActiveUsers', Object.values(activeSessions));
         }
+    });
+
+    socket.on('disconnect', () => {
+        delete activeSessions[socket.id];
+        io.emit('updateActiveUsers', Object.values(activeSessions));
     });
 });
