@@ -1,7 +1,23 @@
-// Example Calculation Logic
-const calculateLotTotal = (quantity, ratePerKg) => {
-    return parseFloat((quantity * ratePerKg).toFixed(2));
-};
+// ... inside your spiceCatalog array
+{ 
+    name: "LOT-102: Green Cardamom (Premium)", 
+    startPrice: 1450,
+    specs: {
+        bags: 10,
+        totalWeight: 500, // in Kgs
+        moisture: "10.5%",
+        size: "8mm+",
+        // ... (keep other specs)
+    }
+}
 
-// Example for an auction report entry
-const lotValue = calculateLotTotal(124.2, 736.00); // 91411.20
+// ... inside your placeBid socket listener
+socket.on('placeBid', (data) => {
+    if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
+        auctionState.highestBid = data.amount;
+        // Calculate the total value immediately
+        auctionState.totalValue = auctionState.highestBid * auctionState.specs.totalWeight;
+        
+        // ... (keep the rest of your broadcast logic)
+    }
+});
