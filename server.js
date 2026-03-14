@@ -1,21 +1,27 @@
-// Add this to your session data
-let sessionTransactions = [];
+const { Parser } = require('json2csv');
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
 
-// Inside your timer/auctionEnded logic:
-if (auctionState.timeLeft === 0) {
-    const totalValue = auctionState.highestBid * auctionState.specs.totalWeight;
-    const commission = totalValue * 0.01; // Standard 1% Spice Board Commission
+// Add this to your adminAction listener
+socket.on('adminAction', async (data) => {
+    if (data.password === ADMIN_PASSWORD && data.action === 'end_session') {
+        const reportData = generateEODSummary();
+        
+        // 1. Generate CSV
+        const fields = ['lot', 'bidder', 'price', 'weight', 'totalValue', 'commission'];
+        const json2csvParser = new Parser({ fields });
+        const csv = json2csvParser.parse(sessionTransactions);
+        fs.writeFileSync('auction_report.csv', csv);
 
-    const invoiceData = {
-        lot: auctionState.currentLot,
-        bidder: auctionState.highestBidder,
-        price: auctionState.highestBid,
-        weight: auctionState.specs.totalWeight,
-        totalValue: totalValue,
-        commission: commission,
-        grandTotal: totalValue + commission
-    };
+        // 2. Generate PDF
+        const doc = new PDFDocument();
+        doc.pipe(fs.createWriteStream('auction_report.pdf'));
+        doc.fontSize(20).text('Spices Board e-Auction Summary', { align: 'center' });
+        doc.fontSize(12).text(`Total Revenue: ${reportData.totalRevenue}`);
+        doc.text(`Total Volume: ${reportData.totalVolume}`);
+        doc.end();
 
-    sessionTransactions.push(invoiceData);
-    io.emit('newTransaction', invoiceData);
-}
+        // 3. Send Email (using Nodemailer)
+        // ... Logic to email sajojoseph.sb@gmail.com with attachments
+    }
+});
