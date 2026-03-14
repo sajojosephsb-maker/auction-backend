@@ -1,29 +1,26 @@
-// Add these to your global variables in server.js
-let sessionStats = {
-    highestRate: 0,
-    lowestRate: Infinity,
-    totalWinningValue: 0,
-    totalWinningKg: 0
-};
+const GST_RATE = 0.05;
+let sessionTotalQty = 0;
+let sessionTotalValue = 0;
+let sessionTotalWithTax = 0;
 
-// Update this inside your timer/auctionEnded logic
-if (auctionState.timeLeft === 0) {
-    const finalRate = auctionState.highestBid;
-    const finalWeight = auctionState.specs.totalWeight;
+const tableData = lotHistory.map(item => {
+    const qty = item.weight || 600; // Defaulting to your standard lot weight
+    const totalValue = item.price * qty;
+    const tax = totalValue * GST_RATE;
+    const grandTotal = totalValue + tax;
 
-    // Update High/Low Rates
-    if (finalRate > sessionStats.highestRate) sessionStats.highestRate = finalRate;
-    if (finalRate < sessionStats.lowestRate && finalRate > 0) sessionStats.lowestRate = finalRate;
+    // Running Totals
+    sessionTotalQty += qty;
+    sessionTotalValue += totalValue;
+    sessionTotalWithTax += grandTotal;
 
-    // Update for Average Calculation
-    sessionStats.totalWinningValue += (finalRate * finalWeight);
-    sessionStats.totalWinningKg += finalWeight;
-
-    const auctionAverage = sessionStats.totalWinningValue / sessionStats.totalWinningKg;
-
-    io.emit('updateGlobalStats', {
-        high: sessionStats.highestRate,
-        low: sessionStats.lowestRate === Infinity ? 0 : sessionStats.lowestRate,
-        avg: auctionAverage.toFixed(2)
-    });
-}
+    return {
+        lot: item.lot,
+        bidder: item.bidder,
+        qty: qty,
+        rate: item.price,
+        value: totalValue,
+        gst: tax,
+        total: grandTotal
+    };
+});
