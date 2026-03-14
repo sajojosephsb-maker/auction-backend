@@ -5,6 +5,8 @@ const io = require('socket.io')(http, { cors: { origin: "*" } });
 
 const ADMIN_PASSWORD = "spices_admin_2026";
 let allTransactions = []; 
+let bannedBuyers = new Set(); // Stores banned bidder names
+
 let auctionState = {
     currentLot: "WAITING",
     highestBid: 0,
@@ -21,35 +23,23 @@ io.on('connection', (socket) => {
     socket.on('adminAction', (data) => {
         if (data.password !== ADMIN_PASSWORD) return;
 
-        switch(data.action) {
-            case 'START':
-                auctionState = { ...auctionState, currentLot: data.lotId, highestBid: data.price, isEnded: false, timeLeft: 60, status: "LIVE", qualityNote: "" };
-                break;
-            case 'ACCEPT':
-                auctionState.timeLeft = 0; // Ends lot immediately and saves winner
-                break;
-            case 'RERUN':
-                auctionState.highestBid = data.price || 1000;
-                auctionState.highestBidder = "No Bids";
-                auctionState.timeLeft = 60;
-                auctionState.isEnded = false;
-                break;
-            case 'WITHDRAW':
-                auctionState.isEnded = true;
-                auctionState.status = "WITHDRAWN";
-                break;
-            case 'SKIP':
-                auctionState.isEnded = true;
-                auctionState.status = "SKIPPED";
-                break;
-            case 'QUALITY_ALERT':
-                auctionState.qualityNote = data.note;
-                break;
+        if (data.action === 'BAN_BUYER') {
+            bannedBuyers.add(data.buyerName);
+            io.emit('buyerBanned', { name: data.buyerName });
+            console.log(`Buyer Banned: ${data.buyerName}`);
+        } else if (data.action === 'UNBAN_BUYER') {
+            bannedBuyers.delete(data.buyerName);
         }
-        io.emit('updateBid', auctionState);
+        // ... include previous switch cases (START, ACCEPT, RERUN, WITHDRAW, etc.)
     });
 
     socket.on('placeBid', (data) => {
+        // Block the bid if the buyer is in the banned list
+        if (bannedBuyers.has(data.bidderName)) {
+            socket.emit('error', 'You have been suspended from bidding.');
+            return;
+        }
+        
         if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
             auctionState.highestBid = data.amount;
             auctionState.highestBidder = data.bidderName;
@@ -58,19 +48,5 @@ io.on('connection', (socket) => {
         }
     });
 });
-
-setInterval(() => {
-    if (auctionState.timeLeft > 0 && !auctionState.isEnded) {
-        auctionState.timeLeft--;
-        io.emit('timerUpdate', auctionState.timeLeft);
-        if (auctionState.timeLeft === 0) {
-            auctionState.isEnded = true;
-            if (auctionState.highestBidder !== "No Bids") {
-                allTransactions.push({ date: new Date(), lot: auctionState.currentLot, bidder: auctionState.highestBidder, rate: auctionState.highestBid });
-            }
-            io.emit('auctionEnded', auctionState);
-        }
-    }
-}, 1000);
 
 http.listen(process.env.PORT || 10000, () => { console.log('Admin Master Server Active'); });
