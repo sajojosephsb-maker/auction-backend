@@ -1,54 +1,30 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-
-const ADMIN_PASSWORD = "spices_admin_2026";
-let auctionCatalogue = [];
-let allTransactions = [];
-
-let auctionState = {
-    currentLot: "IDLE",
-    highestBid: 0,
-    highestBidder: "No Bids",
-    timeLeft: 0,
-    isEnded: true,
-    weight: 0,
-    imageUrl: "default-cardamom.jpg"
-};
+// --- AUTHENTICATION STORAGE ---
+let authorizedBidders = [
+    { id: "BID001", pass: "1234", name: "John Cardamom Traders" },
+    { id: "BID002", pass: "5678", name: "Spices Export Ltd" }
+];
 
 io.on('connection', (socket) => {
-    socket.emit('updateBid', auctionState);
+    // Admin creates or edits a bidder
+    socket.on('adminAction', (data) => {
+        if (data.password !== ADMIN_PASSWORD) return;
 
-    // Video Streaming Relay
-    socket.on('streamFrame', (frameData) => {
-        // Broadcast the live video frame to all buyers
-        socket.broadcast.emit('liveVideoFrame', frameData);
-    });
-
-    socket.on('startLotByIndex', (data) => {
-        if (data.password === ADMIN_PASSWORD) {
-            const lot = auctionCatalogue[data.index];
-            auctionState = {
-                currentLot: lot.lotNumber,
-                highestBid: lot.auctionStartPrice,
-                highestBidder: "No Bids",
-                timeLeft: 60,
-                isEnded: false,
-                weight: lot.quantity,
-                imageUrl: lot.imageUrl || "default-cardamom.jpg"
-            };
-            io.emit('updateBid', auctionState);
+        if (data.action === 'CREATE_USER') {
+            authorizedBidders.push({ id: data.bidId, pass: data.bidPass, name: data.bidName });
+            console.log(`User ${data.bidName} Created`);
+        } else if (data.action === 'EDIT_USER') {
+            let user = authorizedBidders.find(u => u.id === data.bidId);
+            if (user) { user.pass = data.bidPass; user.name = data.bidName; }
         }
     });
 
-    socket.on('placeBid', (data) => {
-        if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
-            auctionState.highestBid = data.amount;
-            auctionState.highestBidder = data.bidderName;
-            io.emit('updateBid', auctionState);
+    // Login Verification
+    socket.on('loginAttempt', (data) => {
+        const user = authorizedBidders.find(u => u.id === data.id && u.pass === data.pass);
+        if (user) {
+            socket.emit('loginResponse', { success: true, name: user.name });
+        } else {
+            socket.emit('loginResponse', { success: false, message: "Invalid ID or Password" });
         }
     });
 });
-
-http.listen(process.env.PORT || 10000, () => { console.log('Video Master Engine Live'); });
