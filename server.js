@@ -1,21 +1,15 @@
-// Add this near your other auctionState variables
-let sessionPriceHistory = []; 
+// ... inside your placeBid socket listener
+socket.on('placeBid', (data) => {
+    // ... (keep your credit limit logic)
 
-io.on('connection', (socket) => {
-    // Send history to new users so they see the full chart
-    socket.emit('updateHistory', sessionPriceHistory);
+    if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
+        auctionState.highestBid = data.amount;
+        auctionState.highestBidder = data.bidderName;
 
-    // ... inside the timer completion logic (when auctionState.timeLeft === 0)
-    if (!auctionState.isEnded) {
-        auctionState.isEnded = true;
+        // NEW: Set time limit to 10 seconds for rapid-fire bidding
+        auctionState.timeLeft = 10; 
         
-        // Save the result to our session history
-        sessionPriceHistory.push({
-            label: auctionState.currentLot.split(":")[0], // e.g., "LOT-102"
-            price: auctionState.highestBid
-        });
-
-        io.emit('auctionEnded', auctionState);
-        io.emit('updateHistory', sessionPriceHistory); // Broadcast the new data point
+        io.emit('updateBid', auctionState);
+        io.emit('timerUpdate', auctionState.timeLeft);
     }
 });
