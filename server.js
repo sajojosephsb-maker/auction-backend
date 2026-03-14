@@ -4,6 +4,7 @@ const spiceCatalog = [
     { 
         name: "LOT-102: Green Cardamom (Premium)", 
         startPrice: 1450,
+        imageUrl: "https://images.unsplash.com/photo-1599193333428-1c67d7fc471d?auto=format&fit=crop&q=80&w=400", 
         specs: {
             quantity: "15 Bags (750 kg)",
             moisture: "10.5%",
@@ -14,8 +15,9 @@ const spiceCatalog = [
         }
     },
     { 
-        name: "LOT-103: Black Pepper (TGSEB)", 
+        name: "LOT-103: Black Pepper (Malabar)", 
         startPrice: 650,
+        imageUrl: "https://images.unsplash.com/photo-1599193332309-88775e11f7ca?auto=format&fit=crop&q=80&w=400",
         specs: {
             quantity: "20 Bags (1000 kg)",
             moisture: "11.0%",
@@ -27,34 +29,4 @@ const spiceCatalog = [
     }
 ];
 
-let catalogIndex = 0;
-
-let auctionState = {
-    currentLot: spiceCatalog[0].name,
-    highestBid: spiceCatalog[0].startPrice,
-    highestBidder: "No Bids",
-    bidHistory: [],
-    timeLeft: 60,
-    isEnded: false,
-    specs: spiceCatalog[0].specs // Add this line
-};
-
-// ... (keep timer and connection logic)
-
-    socket.on('adminNextLot', () => {
-        catalogIndex = (catalogIndex + 1) % spiceCatalog.length;
-        const nextItem = spiceCatalog[catalogIndex];
-
-        auctionState = {
-            currentLot: nextItem.name,
-            highestBid: nextItem.startPrice,
-            highestBidder: "No Bids",
-            bidHistory: [],
-            timeLeft: 60,
-            isEnded: false,
-            specs: nextItem.specs // Update this line
-        };
-
-        io.emit('updateBid', auctionState);
-        // ...
-    });
+// ... (keep the rest of your auctionState and logic)
