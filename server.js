@@ -1,49 +1,83 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const cors = require('cors');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Spice Auction - Spices Board</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 20px; background-color: #f0f4f0; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .auction-board { border: 3px solid #2e7d32; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1 { color: #2e7d32; font-size: 3.5em; margin: 10px 0; font-weight: bold; }
+        .history-panel { background: white; border-radius: 10px; padding: 15px; text-align: left; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .history-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 0.9em; }
+        .history-item:last-child { border-bottom: none; }
+        input { padding: 12px; font-size: 16px; border: 2px solid #ddd; border-radius: 8px; width: 150px; outline: none; }
+        button { padding: 12px 25px; font-size: 16px; background-color: #2e7d32; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #1b5e20; }
+        .label { color: #666; text-transform: uppercase; font-size: 0.8em; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
 
-const app = express();
-app.use(cors());
-const server = http.createServer(app);
+    <div class="container">
+        <h2 style="color: #333;">Live Spices e-Auction</h2>
+        
+        <div class="auction-board">
+            <div class="label">Currently Bidding On</div>
+            <h3 id="lot-name">LOT-102 (Green Cardamom)</h3>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            <div class="label">Current High Bid</div>
+            <h1 id="current-bid">₹1450</h1>
+            <p>Highest Bidder: <strong id="bidder-id">None</strong></p>
+        </div>
 
-const io = new Server(server, {
-    cors: { 
-        origin: "https://sajojosephsb-maker.github.io",
-        methods: ["GET", "POST"]
-    }
-});
+        <div style="margin-bottom: 30px;">
+            <input type="number" id="bid-input" placeholder="Enter Amount">
+            <button onclick="placeBid()">Place Bid</button>
+        </div>
 
-// Track the state and the last 5 bids
-let auctionState = {
-    currentLot: "LOT-102 (Green Cardamom)",
-    highestBid: 1450,
-    highestBidder: "None",
-    bidHistory: [] 
-};
+        <div class="history-panel">
+            <div class="label" style="margin-bottom: 10px;">Recent Bid History</div>
+            <div id="history-list">
+                <p style="color: #999; font-style: italic;">No bids yet...</p>
+            </div>
+        </div>
+    </div>
 
-io.on('connection', (socket) => {
-    socket.emit('updateBid', auctionState);
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script>
+        const socket = io('https://spice-auction-server.onrender.com'); 
+        let currentBid = 0;
 
-    socket.on('placeBid', (data) => {
-        if (data.amount > auctionState.highestBid) {
-            const bidderName = "Buyer_" + Math.floor(Math.random() * 900 + 100);
-            
-            auctionState.highestBid = data.amount;
-            auctionState.highestBidder = bidderName;
+        socket.on('updateBid', (data) => {
+            currentBid = data.highestBid;
+            document.getElementById('current-bid').innerText = '₹' + data.highestBid;
+            document.getElementById('bidder-id').innerText = data.highestBidder;
 
-            // Add to history and keep only the last 5
-            auctionState.bidHistory.unshift({
-                amount: data.amount,
-                bidder: bidderName,
-                time: new Date().toLocaleTimeString()
-            });
-            if (auctionState.bidHistory.length > 5) auctionState.bidHistory.pop();
-            
-            io.emit('updateBid', auctionState);
+            // Update History List
+            const historyDiv = document.getElementById('history-list');
+            if (data.bidHistory.length > 0) {
+                historyDiv.innerHTML = data.bidHistory.map(bid => `
+                    <div class="history-item">
+                        <span><strong>₹${bid.amount}</strong> by ${bid.bidder}</span>
+                        <span style="color: #888;">${bid.time}</span>
+                    </div>
+                `).join('');
+            }
+        });
+
+        function placeBid() {
+            const inputField = document.getElementById('bid-input');
+            const newBid = parseInt(inputField.value);
+
+            if (newBid > currentBid) {
+                socket.emit('placeBid', { amount: newBid });
+                inputField.value = '';
+            } else {
+                alert("Your bid must be higher than ₹" + currentBid);
+            }
         }
-    });
-});
-
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    </script>
+</body>
+</html>
