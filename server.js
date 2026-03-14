@@ -1,27 +1,17 @@
-// Add this to your global variables in server.js
-let sessionLeaderboard = {}; 
+const ADMIN_PASSWORD = "spices_admin_2026"; // Change this to your secret password
 
 io.on('connection', (socket) => {
-    // Send current rankings to new connections
-    socket.emit('updateLeaderboard', Object.entries(sessionLeaderboard));
+    // ... existing logic ...
 
-    // Update whenever a lot ends
-    socket.on('auctionEnded', (data) => {
-        const winner = data.highestBidder;
-        const totalValue = data.highestBid * data.specs.totalWeight;
-
-        // Add value to the winner's session total
-        if (sessionLeaderboard[winner]) {
-            sessionLeaderboard[winner] += totalValue;
+    socket.on('adminAction', (data) => {
+        if (data.password === ADMIN_PASSWORD) {
+            if (data.action === 'next') {
+                moveToNextLot(); // Your existing function to change lots
+            } else if (data.action === 'reset') {
+                resetCurrentAuction();
+            }
         } else {
-            sessionLeaderboard[winner] = totalValue;
+            socket.emit('error', 'Invalid Admin Password!');
         }
-
-        // Sort and broadcast the top 5 buyers
-        const sortedLeaderboard = Object.entries(sessionLeaderboard)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 5);
-
-        io.emit('updateLeaderboard', sortedLeaderboard);
     });
 });
