@@ -1,11 +1,37 @@
-// Add this inside your PDF generation logic
-doc.addPage()
-   .fontSize(16)
-   .text('Buyer Performance Ranking', { underline: true });
+// Add these to your global variables in server.js
+let pendingBuyers = [];
+let approvedBuyers = {}; // Stores { username: password }
 
-const sortedBuyers = Object.entries(sessionLeaderboard)
-    .sort(([,a], [,b]) => b - a);
+io.on('connection', (socket) => {
+    // Handling Registration
+    socket.on('registerBuyer', (data) => {
+        // Check if buyer already exists
+        if (approvedBuyers[data.username]) {
+            return socket.emit('error', 'Username already registered.');
+        }
+        
+        pendingBuyers.push({
+            id: socket.id,
+            username: data.username,
+            company: data.company,
+            gst: data.gst
+        });
+        
+        // Notify Admin of a new request
+        io.emit('newRegistrationRequest', pendingBuyers);
+        socket.emit('status', 'Registration pending admin approval...');
+    });
 
-sortedBuyers.forEach(([name, total], index) => {
-    doc.fontSize(12).text(`${index + 1}. ${name}: ₹${total.toLocaleString('en-IN')}`);
+    // Admin Approval Logic
+    socket.on('adminAction', (data) => {
+        if (data.password === ADMIN_PASSWORD && data.action === 'approve_buyer') {
+            const buyer = pendingBuyers.find(b => b.username === data.targetUser);
+            if (buyer) {
+                approvedBuyers[buyer.username] = true;
+                pendingBuyers = pendingBuyers.filter(b => b.username !== data.targetUser);
+                io.emit('buyerApproved', buyer.username);
+                io.emit('newRegistrationRequest', pendingBuyers); // Update admin list
+            }
+        }
+    });
 });
