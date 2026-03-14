@@ -1,31 +1,50 @@
-let currentLotIndex = 0; // Track which lot we are on
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http, { cors: { origin: "*" } });
+const mongoose = require('mongoose');
 
-socket.on('adminAction', async (data) => {
-    if (data.password !== ADMIN_PASSWORD) return;
+const MONGO_URI = process.env.MONGO_URI;
+mongoose.connect(MONGO_URI).then(() => console.log("Cloud DB Connected")).catch(err => console.log(err));
 
-    if (data.action === 'ACCEPT_AND_NEXT') {
-        // 1. End current lot immediately
-        auctionState.timeLeft = 0;
-        auctionState.isEnded = true;
-        
-        // 2. Move to next lot after a 3-second delay (to show result)
-        setTimeout(() => {
-            currentLotIndex++;
-            if (currentLotIndex < auctionCatalogue.length) {
-                const nextLot = auctionCatalogue[currentLotIndex];
-                auctionState = {
-                    currentLot: nextLot.lotNumber,
-                    highestBid: nextLot.startPrice,
-                    highestBidder: "No Bids",
-                    timeLeft: 60,
-                    isEnded: false,
-                    weight: nextLot.weight
-                };
-                io.emit('updateBid', auctionState);
-                io.emit('statusUpdate', { message: `Moving to Lot ${nextLot.lotNumber}` });
-            } else {
-                io.emit('statusUpdate', { message: "Auction Catalogue Finished!" });
-            }
-        }, 3000); 
-    }
+const SaleSchema = new mongoose.Schema({
+    lot: String, buyer: String, rate: Number, total: String, date: { type: Date, default: Date.now }
 });
+const Sale = mongoose.model('Sale', SaleSchema);
+
+const ADMIN_PASSWORD = "spices_admin_2026";
+let auctionCatalogue = [];
+let currentLotIndex = 0;
+let auctionState = { currentLot: "IDLE", highestBid: 0, highestBidder: "No Bids", timeLeft: 0, isEnded: true, weight: 0 };
+
+io.on('connection', (socket) => {
+    socket.emit('updateBid', auctionState);
+
+    socket.on('adminAction', async (data) => {
+        if (data.password !== ADMIN_PASSWORD) return;
+        
+        if (data.action === 'ACCEPT_AND_NEXT') {
+            auctionState.timeLeft = 0;
+            auctionState.isEnded = true;
+            
+            setTimeout(() => {
+                currentLotIndex++;
+                if (currentLotIndex < auctionCatalogue.length) {
+                    const nextLot = auctionCatalogue[currentLotIndex];
+                    auctionState = { currentLot: nextLot.lotNumber, highestBid: nextLot.startPrice, highestBidder: "No Bids", timeLeft: 60, isEnded: false, weight: nextLot.weight };
+                    io.emit('updateBid', auctionState);
+                }
+            }, 3000);
+        }
+    });
+
+    socket.on('placeBid', (data) => {
+        if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
+            auctionState.highestBid = data.amount;
+            auctionState.highestBidder = data.bidderName;
+            io.emit('updateBid', auctionState);
+        }
+    });
+});
+
+http.listen(process.env.PORT || 10000);
