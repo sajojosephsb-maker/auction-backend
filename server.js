@@ -24,16 +24,20 @@ io.on('connection', (socket) => {
     socket.emit('updateBid', auctionState);
     socket.emit('updateLotHistory', lotHistory);
 
-    // MESSAGE BROADCAST
-    socket.on('adminBroadcast', (data) => {
-        if (data.password === ADMIN_PASSWORD) {
-            io.emit('showAnnouncement', data.message);
+    socket.on('placeBid', (data) => {
+        if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
+            auctionState.highestBid = data.amount;
+            auctionState.highestBidder = data.bidderName;
+            
+            // BIDDING WAR MECHANIC: Reset timer to 10s if it's lower
+            if (auctionState.timeLeft < 10) auctionState.timeLeft = 10;
+            
+            io.emit('updateBid', auctionState);
         }
     });
 
-    socket.on('registerBuyer', (data) => {
-        pendingBuyers.push({ id: socket.id, ...data });
-        io.emit('newRegistrationRequest', pendingBuyers);
+    socket.on('adminBroadcast', (data) => {
+        if (data.password === ADMIN_PASSWORD) io.emit('showAnnouncement', data.message);
     });
 
     socket.on('disconnect', () => {
@@ -41,5 +45,17 @@ io.on('connection', (socket) => {
         io.emit('updateParticipantCount', participantCount);
     });
 });
+
+// THE TIMER (Must be present for lots to close)
+setInterval(() => {
+    if (auctionState.timeLeft > 0 && !auctionState.isEnded) {
+        auctionState.timeLeft--;
+        io.emit('timerUpdate', auctionState.timeLeft);
+        if (auctionState.timeLeft === 0) {
+            auctionState.isEnded = true;
+            io.emit('auctionEnded', auctionState);
+        }
+    }
+}, 1000);
 
 http.listen(process.env.PORT || 10000, () => { console.log('Server Live'); });
