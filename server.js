@@ -1,24 +1,25 @@
-// ... (Inside your placeBid socket listener in server.js)
+// ... (inside the placeBid socket listener in server.js)
 socket.on('placeBid', (data) => {
-    // 1. Calculate the cost of the potential new win
-    const potentialTotal = data.amount * auctionState.specs.totalWeight;
+    // 1. Calculate value of the CURRENT lot being bid on
+    const currentLotValue = data.amount * auctionState.specs.totalWeight;
     
-    // 2. Default Credit Limit: ₹10,00,000 (10 Lakhs)
-    const creditLimit = 1000000;
-    const currentSpent = data.currentSpent || 0;
+    // 2. Add the value of all lots ALREADY won today
+    const sessionTotalSpent = data.currentSpent || 0;
+    const grandTotal = sessionTotalSpent + currentLotValue;
 
-    // Check if the buyer is over their limit
-    if (currentSpent + potentialTotal > creditLimit) {
-        socket.emit('error', 'Credit Limit Exceeded! Please contact the admin to increase your limit.');
+    // 3. Financial Safety: 10 Lakh Session Limit
+    const creditLimit = 1000000; 
+
+    if (grandTotal > creditLimit) {
+        socket.emit('error', `Bidding Blocked! This bid would bring your session total to ₹${grandTotal.toLocaleString('en-IN')}, exceeding your ₹10L limit.`);
         return;
     }
 
-    // If limit is okay, proceed with the bid
+    // Accept bid if within limit
     if (!auctionState.isEnded && data.amount > auctionState.highestBid) {
         auctionState.highestBid = data.amount;
         auctionState.highestBidder = data.bidderName;
-        auctionState.timeLeft = 60; // Reset timer
-        // ... broadcast updates as before
+        auctionState.timeLeft = 60;
         io.emit('updateBid', auctionState);
     }
 });
