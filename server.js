@@ -1,16 +1,7 @@
-// ... (inside your timer interval when timeLeft === 0)
-} else if (!auctionState.isEnded) {
-    auctionState.isEnded = true;
-    
-    // Create a 'win' object to send to the dashboard
-    const winRecord = {
-        lot: auctionState.currentLot,
-        price: auctionState.highestBid,
-        winner: auctionState.highestBidder,
-        specs: auctionState.specs,
-        date: new Date().toLocaleDateString()
-    };
-    
-    io.emit('auctionEnded', winRecord);
-    clearInterval(timerInterval);
-}
+// Example Calculation Logic
+const calculateLotTotal = (quantity, ratePerKg) => {
+    return parseFloat((quantity * ratePerKg).toFixed(2));
+};
+
+// Example for an auction report entry
+const lotValue = calculateLotTotal(124.2, 736.00); // 91411.20
