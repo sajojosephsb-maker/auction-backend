@@ -1,73 +1,10 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
+let salesHistory = []; // Add this at the top with other variables
 
-mongoose.connect(process.env.MONGO_URI).then(() => console.log("Cloud DB Connected"));
-
-const SaleSchema = new mongoose.Schema({ lot: String, buyer: String, rate: Number, weight: Number });
-const Sale = mongoose.model('Sale', SaleSchema);
-
-// Registration Database (Simple for now)
-let authorizedBidders = { "BID-001": "Sajo Joseph", "BID-002": "Puttady Trader" };
-let winCounts = {}; 
-let auctionState = { currentLot: "IDLE", highestBid: 0, highestBidder: "No Bids", timeLeft: 0, isEnded: true, weight: 0 };
-let auctionCatalogue = [];
-let currentLotIndex = 0;
-
-io.on('connection', (socket) => {
-    socket.emit('updateBid', auctionState);
+// Inside your setInterval where timeLeft === 0:
+if (auctionState.highestBidder !== "No Bids") {
+    const saleData = { lot: auctionState.currentLot, buyer: auctionState.highestBidder, rate: auctionState.highestBid };
+    salesHistory.unshift(saleData); // Add new sale to the beginning
     
-    // REGISTRATION LOGIC
-    socket.on('registerUser', (data) => {
-        const newId = "BID-" + Math.floor(100 + Math.random() * 900);
-        authorizedBidders[newId] = data.name;
-        socket.emit('registrationSuccess', { id: newId, name: data.name });
-    });
-
-    socket.on('uploadCatalogue', (data) => {
-        if (data.password === "spices_admin_2026") {
-            auctionCatalogue = data.list;
-            currentLotIndex = 0;
-            startLot(0);
-        }
-    });
-
-    socket.on('placeBid', (data) => {
-        const bidderName = authorizedBidders[data.userId];
-        if (bidderName && !auctionState.isEnded && data.amount > auctionState.highestBid) {
-            auctionState.highestBid = data.amount;
-            auctionState.highestBidder = bidderName;
-            io.emit('updateBid', auctionState);
-        }
-    });
-});
-
-function startLot(index) {
-    const item = auctionCatalogue[index];
-    auctionState = { currentLot: item.lotNumber, highestBid: item.startPrice, highestBidder: "No Bids", timeLeft: 60, isEnded: false, weight: item.weight };
-    io.emit('updateBid', auctionState);
+    // Update the io.emit to include history
+    io.emit('updateBid', { ...auctionState, history: salesHistory, leaderboard: leaderboard });
 }
-
-setInterval(async () => {
-    if (auctionState.timeLeft > 0 && !auctionState.isEnded) {
-        auctionState.timeLeft--;
-        if (auctionState.timeLeft === 0) {
-            auctionState.isEnded = true;
-            if (auctionState.highestBidder !== "No Bids") {
-                winCounts[auctionState.highestBidder] = (winCounts[auctionState.highestBidder] || 0) + 1;
-                await new Sale({ lot: auctionState.currentLot, buyer: auctionState.highestBidder, rate: auctionState.highestBid, weight: auctionState.weight }).save();
-            }
-            const leaderboard = Object.keys(winCounts).map(n => ({ name: n, lots: winCounts[n] })).sort((a,b) => b.lots - a.lots);
-            io.emit('updateBid', { ...auctionState, leaderboard });
-            setTimeout(() => {
-                currentLotIndex++;
-                if (currentLotIndex < auctionCatalogue.length) startLot(currentLotIndex);
-            }, 3000);
-        }
-        io.emit('updateBid', auctionState);
-    }
-}, 1000);
-
-http.listen(process.env.PORT || 10000);
