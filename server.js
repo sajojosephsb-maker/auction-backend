@@ -1,27 +1,16 @@
 socket.on('attemptLogin', async ({ loginId, password }) => {
-    // Search by either ID (Admin/Trader/Co) or Phone (Planter)
-    const user = await User.findOne({ 
-        $or: [{ userId: loginId }, { phone: loginId }], 
-        password: password 
-    });
+    // Finds user by ID (Admin/Trader/Co) or Phone (Planter)
+    const user = await User.findOne({ $or: [{ userId: loginId }, { phone: loginId }], password });
 
     if (user && user.status === 'active') {
-        let destination = "buyer.html"; // Default for Traders
-        
-        switch(user.role) {
-            case 'admin':   destination = 'index.html'; break;
-            case 'company': destination = 'company-dashboard.html'; break;
-            case 'planter': destination = 'planter-portal.html'; break;
-            case 'quality': destination = 'colour-check.html'; break;
-        }
+        let destination = "buyer.html"; // Default
+        if (user.role === 'admin')   destination = 'index.html';
+        if (user.role === 'company') destination = 'company-dashboard.html';
+        if (user.role === 'planter') destination = 'planter-portal.html';
+        if (user.role === 'quality') destination = 'colour-check.html';
 
-        socket.emit('loginResponse', { 
-            success: true, 
-            userId: user.userId, 
-            role: user.role,
-            target: destination 
-        });
+        socket.emit('loginResponse', { success: true, target: destination });
     } else {
-        socket.emit('loginResponse', { success: false, message: "Invalid ID or Password" });
+        socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
     }
 });
