@@ -1,60 +1,38 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
-
-const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
-mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
-
+// Add 'role' to your UserSchema
 const UserSchema = new mongoose.Schema({
     userId: { type: String, unique: true },
     password: { type: String },
+    role: { type: String }, // 'trader' or 'company'
     status: { type: String, default: 'active' }
 });
 const User = mongoose.model('User', UserSchema);
 
 io.on('connection', (socket) => {
-    // Admin: Get Trader List
-    socket.on('getTraders', async () => {
-        const traders = await User.find({});
-        socket.emit('traderListUpdate', traders);
-    });
-
-    // Admin: Create Trader
-    socket.on('createTrader', async (data) => {
+    // Admin: Create any account (Trader or Company)
+    socket.on('createAccount', async (data) => {
         try {
-            await new User({ userId: data.traderId, password: data.traderPassword }).save();
-            const traders = await User.find({});
-            io.emit('traderListUpdate', traders);
-            socket.emit('traderStatus', { success: true, msg: "✅ Trader Added!" });
+            await new User({ 
+                userId: data.userId, 
+                password: data.password, 
+                role: data.role 
+            }).save();
+            const allUsers = await User.find({});
+            io.emit('userListUpdate', allUsers);
+            socket.emit('status', { success: true, msg: `${data.role} Created!` });
         } catch (e) {
-            socket.emit('traderStatus', { success: false, msg: "❌ ID already exists." });
+            socket.emit('status', { success: false, msg: "ID already exists." });
         }
     });
 
-    // Admin: Update Status / Delete
-    socket.on('updateTraderStatus', async ({ id, status }) => {
-        await User.findOneAndUpdate({ userId: id }, { status });
-        const traders = await User.find({});
-        io.emit('traderListUpdate', traders);
-    });
-
-    socket.on('deleteTrader', async (id) => {
-        await User.findOneAndDelete({ userId: id });
-        const traders = await User.find({});
-        io.emit('traderListUpdate', traders);
-    });
-
-    // Trader: Login Logic
+    // Login logic that redirects based on role
     socket.on('attemptLogin', async ({ userId, password }) => {
         const user = await User.findOne({ userId, password });
         if (user && user.status === 'active') {
-            socket.emit('loginResponse', { success: true, userId: user.userId });
+            const target = user.role === 'admin' ? 'index.html' : 
+                           user.role === 'company' ? 'company-dashboard.html' : 'buyer.html';
+            socket.emit('loginResponse', { success: true, userId: user.userId, target });
         } else {
-            socket.emit('loginResponse', { success: false, message: user ? "Account Blocked" : "Invalid Login" });
+            socket.emit('loginResponse', { success: false, message: "Access Denied" });
         }
     });
 });
-
-http.listen(process.env.PORT || 10000);
