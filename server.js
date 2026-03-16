@@ -8,20 +8,20 @@ const mongoose = require('mongoose');
 mongoose.connect("mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/auction")
     .then(() => console.log("🚀 MongoDB Connected"));
 
-// Expanded User Schema
+// Expanded User Schema with 'name' and 'phone'
 const User = mongoose.model('User', new mongoose.Schema({
     userId: { type: String, unique: true },
     phone: { type: String, unique: true },
     password: { type: String, required: true },
     role: { type: String, required: true },
-    name: String,
+    name: String, // Added for personalized greetings
     status: { type: String, default: 'active' }
 }));
 
 io.on('connection', (socket) => {
     socket.on('attemptLogin', async ({ loginId, password }) => {
         try {
-            // Support both ID and Phone
+            // Find user by ID or Phone
             const user = await User.findOne({ 
                 $or: [{ userId: loginId }, { phone: loginId }], 
                 password: password 
@@ -36,16 +36,17 @@ io.on('connection', (socket) => {
                     planter: 'planter-portal.html'
                 };
                 
+                // Send back user details to be stored in the browser
                 socket.emit('loginResponse', { 
                     success: true, 
                     target: routes[user.role],
-                    user: { name: user.name, role: user.role } 
+                    user: { name: user.name || user.userId, role: user.role } 
                 });
             } else {
                 socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
             }
         } catch (err) {
-            socket.emit('loginResponse', { success: false, message: "Server Error. Try again." });
+            socket.emit('loginResponse', { success: false, message: "Server Busy. Try again." });
         }
     });
 });
