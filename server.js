@@ -4,11 +4,11 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http, { cors: { origin: "*" } });
 const mongoose = require('mongoose');
 
-// Database Connection
+// 1. Connect to your MongoDB
 const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
 mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
 
-// User Schema (Includes Phone for Planters)
+// 2. Define the User Schema
 const User = mongoose.model('User', new mongoose.Schema({
     userId: { type: String, unique: true },
     phone: String,
@@ -17,24 +17,25 @@ const User = mongoose.model('User', new mongoose.Schema({
     status: { type: String, default: 'active' }
 }));
 
-// Master Gateway Login Logic
+// 3. Central Login Gateway Logic
 io.on('connection', (socket) => {
     socket.on('attemptLogin', async ({ loginId, password }) => {
-        // Search by ID (Admin/Trader/Co) or Phone (Planter)
+        // Search by ID or Phone (for Planters)
         const user = await User.findOne({ $or: [{ userId: loginId }, { phone: loginId }], password });
 
         if (user && user.status === 'active') {
-            let destination = "buyer.html"; // Default
-            if (user.role === 'admin')   destination = 'index.html';
-            if (user.role === 'company') destination = 'company-dashboard.html';
-            if (user.role === 'planter') destination = 'planter-portal.html';
-            if (user.role === 'quality') destination = 'colour-check.html';
+            let target = "buyer.html"; // Default Trader
+            if (user.role === 'admin')   target = 'index.html';
+            if (user.role === 'company') target = 'company-dashboard.html';
+            if (user.role === 'planter') target = 'planter-portal.html';
+            if (user.role === 'quality') target = 'colour-check.html';
 
-            socket.emit('loginResponse', { success: true, target: destination });
+            socket.emit('loginResponse', { success: true, target: target });
         } else {
             socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
         }
     });
 });
 
+// 4. Start the Server
 http.listen(process.env.PORT || 10000, () => console.log('Server Live'));
