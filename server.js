@@ -9,7 +9,15 @@ const cron = require('node-cron');
 const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
 mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
 
-// MASTER SCHEMA FOR HISTORY & REPORTS
+// SCHEMAS
+const User = mongoose.model('User', new mongoose.Schema({
+    userId: { type: String, unique: true },
+    phone: String,
+    password: { type: String },
+    role: { type: String }, // 'trader', 'company', 'planter', 'quality'
+    status: { type: String, default: 'active' }
+}));
+
 const Sale = mongoose.model('Sale', new mongoose.Schema({
     lotNumber: String, planterId: String, traderId: String, companyId: String,
     finalPrice: Number, weight: Number, totalValue: Number,
@@ -18,24 +26,30 @@ const Sale = mongoose.model('Sale', new mongoose.Schema({
 
 // LOGIN & REPORTING LOGIC
 io.on('connection', (socket) => {
+    socket.on('attemptLogin', async ({ loginId, password }) => {
+        const user = await User.findOne({ $or: [{ userId: loginId }, { phone: loginId }], password });
+        if (user && user.status === 'active') {
+            let target = "buyer.html"; // Default Trader
+            if (user.role === 'company') target = 'company-dashboard.html';
+            if (user.role === 'planter') target = 'planter-portal.html';
+            if (user.role === 'quality') target = 'colour-check.html';
+            socket.emit('loginResponse', { success: true, userId: user.userId, target });
+        } else {
+            socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
+        }
+    });
+
     socket.on('getAdminReports', async (filter) => {
         let query = {};
         const now = new Date();
         if(filter.time === 'daily') query.timestamp = { $gte: new Date().setHours(0,0,0,0) };
         if(filter.time === 'weekly') query.timestamp = { $gte: new Date(now.setDate(now.getDate() - 7)) };
         if(filter.time === 'monthly') query.timestamp = { $gte: new Date(now.setMonth(now.getMonth() - 1)) };
-        if(filter.traderId) query.$or = [{ traderId: filter.traderId }, { planterId: filter.traderId }];
+        if(filter.searchId) query.$or = [{ traderId: filter.searchId }, { planterId: filter.searchId }];
 
         const data = await Sale.find(query).sort({ timestamp: -1 });
         socket.emit('reportDataUpdate', data);
     });
-});
-
-// AUTOMATED DAILY EMAIL (8:00 PM)
-cron.schedule('0 20 * * *', async () => {
-    const today = new Date().setHours(0,0,0,0);
-    const sales = await Sale.find({ timestamp: { $gte: today } });
-    // ... (Nodemailer logic to send full report)
 });
 
 http.listen(process.env.PORT || 10000, () => console.log('Server Live'));
