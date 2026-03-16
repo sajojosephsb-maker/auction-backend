@@ -1,41 +1,36 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
-
-// DATABASE CONNECTION
-const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
-mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
-
-// DATA SCHEMA
-const LotSchema = new mongoose.Schema({
-    lotNumber: String, collectionCentre: String, type: String, ownerName: String, 
-    idNumber: String, receiptNumber: String, qtyWithBag: Number, qtyWithoutBag: Number,
-    literWeight: Number, bags: Number, gradeType: String, grade: String,
-    reservedPrice: Number, startPrice: Number, immature: Number, moisture: Number,
-    mobile: String, special: String, colour: String, size: String, split: String,
-    bankName: String, branch: String, accountNo: String, ifsc: String,
-    buyer: { type: String, default: "No Bids" }, rate: { type: Number, default: 0 }
+// 1. ADD USER SCHEMA
+const UserSchema = new mongoose.Schema({
+    userId: { type: String, unique: true },
+    password: { type: String },
+    role: { type: String, default: 'trader' }
 });
-const Sale = mongoose.model('Sale', LotSchema);
+const User = mongoose.model('User', UserSchema);
 
-let auctionCatalogue = [];
-
+// 2. ADD TRADER MANAGEMENT LOGIC
 io.on('connection', (socket) => {
-    console.log("Connected");
+    // ... existing upload logic ...
 
-    // SIMPLE DEV LOGIN & UPLOAD
-    socket.on('uploadCatalogue', async (data) => {
-        if (data.password === "1234") { // Simple password as requested
-            auctionCatalogue = data.list;
-            await Sale.deleteMany({}); // Clear old test data
-            await Sale.insertMany(data.list);
-            console.log(`✅ Received & Saved ${data.list.length} lots`);
-            io.emit('catalogUpdate', { count: data.list.length });
+    // Admin creates a new trader
+    socket.on('createTrader', async (data) => {
+        if (data.adminPassword === "1234") {
+            try {
+                const newUser = new User({ userId: data.traderId, password: data.traderPassword });
+                await newUser.save();
+                console.log(`👤 New Trader Created: ${data.traderId}`);
+                socket.emit('traderCreated', { success: true, id: data.traderId });
+                
+                // Refresh the list for admin
+                const traders = await User.find({ role: 'trader' });
+                io.emit('traderListUpdate', traders);
+            } catch (err) {
+                socket.emit('traderCreated', { success: false, message: "ID already exists" });
+            }
         }
     });
-});
 
-const PORT = process.env.PORT || 10000;
-http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    // Send initial trader list to admin
+    socket.on('getTraders', async () => {
+        const traders = await User.find({ role: 'trader' });
+        socket.emit('traderListUpdate', traders);
+    });
+});
