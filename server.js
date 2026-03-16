@@ -1,45 +1,32 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
-
-// DATABASE CONNECTION
-const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
-mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
-
-// HISTORY SCHEMA
-const QualityHistorySchema = new mongoose.Schema({
+// Schema for Sales/Auction History
+const SalesSchema = new mongoose.Schema({
+    auctionId: String,
     lotNumber: String,
     planterId: String,
-    phone: String,
-    status: String, // 'Passed' or 'Artificially Coloured'
-    parameters: { moisture: Number, weight: Number },
+    traderId: String,
+    companyId: String,
+    finalPrice: Number,
+    weight: Number,
+    totalValue: Number,
     timestamp: { type: Date, default: Date.now }
 });
-const QualityHistory = mongoose.model('QualityHistory', QualityHistorySchema);
+const Sale = mongoose.model('Sale', SalesSchema);
 
-io.on('connection', (socket) => {
-    // Save Record to History
-    socket.on('submitQualityReport', async (data) => {
-        const record = new QualityHistory({
-            lotNumber: data.lotNo,
-            planterId: data.planterName,
-            status: data.isColoured ? 'Artificially Coloured' : 'Passed',
-            parameters: data.params
-        });
-        await record.save();
-        
-        // Notify Admin & Planter
-        io.emit('newHistoryRecord', record);
-        socket.emit('status', { success: true, msg: "Record Saved to History" });
-    });
+// Admin: Generate Multi-Dimension Reports
+socket.on('getAdminReports', async (filter) => {
+    let query = {};
+    const now = new Date();
+    
+    // Time Filters
+    if(filter.time === 'daily') query.timestamp = { $gte: new Date().setHours(0,0,0,0) };
+    if(filter.time === 'weekly') query.timestamp = { $gte: new Date(now.setDate(now.getDate() - 7)) };
+    if(filter.time === 'monthly') query.timestamp = { $gte: new Date(now.setMonth(now.getMonth() - 1)) };
+    
+    // Dimension Filters (Trader/Planter/Company/Auction)
+    if(filter.traderId) query.traderId = filter.traderId;
+    if(filter.planterId) query.planterId = filter.planterId;
+    if(filter.companyId) query.companyId = filter.companyId;
 
-    // Fetch History for Planter
-    socket.on('getPlanterHistory', async (phone) => {
-        const history = await QualityHistory.find({ phone: phone }).sort({ timestamp: -1 });
-        socket.emit('planterHistoryData', history);
-    });
+    const data = await Sale.find(query).sort({ timestamp: -1 });
+    socket.emit('reportDataUpdate', data);
 });
-
-http.listen(process.env.PORT || 10000);
