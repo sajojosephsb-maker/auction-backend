@@ -1,43 +1,27 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
+const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 
-const MONGO_URI = "mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/?appName=Cluster0";
-mongoose.connect(MONGO_URI).then(() => console.log("🚀 MongoDB Connected"));
-
-// MASTER SCHEMA FOR ALL HISTORY
-const SaleSchema = new mongoose.Schema({
-    lotNumber: String, planterId: String, traderId: String, companyId: String,
-    finalPrice: Number, weight: Number, totalValue: Number,
-    timestamp: { type: Date, default: Date.now }
-});
-const Sale = mongoose.model('Sale', SaleSchema);
-
-io.on('connection', (socket) => {
-    // Report Engine: Daily/Weekly/Monthly/Annual
-    socket.on('getAdminReports', async (filter) => {
-        let query = {};
-        const now = new Date();
-        if(filter.time === 'daily') query.timestamp = { $gte: new Date().setHours(0,0,0,0) };
-        if(filter.time === 'weekly') query.timestamp = { $gte: new Date(now.setDate(now.getDate() - 7)) };
-        if(filter.time === 'monthly') query.timestamp = { $gte: new Date(now.setMonth(now.getMonth() - 1)) };
-        
-        // Search by Trader/Planter/Company
-        if(filter.searchId) {
-            query.$or = [{ traderId: filter.searchId }, { planterId: filter.searchId }, { companyId: filter.searchId }];
-        }
-
-        const data = await Sale.find(query).sort({ timestamp: -1 });
-        socket.emit('reportDataUpdate', data);
-    });
-
-    // Login for All Roles (Trader, Company, Planter, Quality)
-    socket.on('attemptLogin', async ({ loginId, password }) => {
-        // Logic to check roles and redirect to specific portals
-        // ... (as provided in previous steps)
-    });
+// Email Configuration
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: 'sajojoseph.sb@gmail.com', pass: 'your-app-password' }
 });
 
-http.listen(process.env.PORT || 10000);
+// Schedule: Every Day at 8:00 PM
+cron.schedule('0 20 * * *', async () => {
+    const today = new Date().setHours(0,0,0,0);
+    const dailySales = await Sale.find({ timestamp: { $gte: today } });
+    
+    let reportTable = dailySales.map(s => 
+        `Lot: ${s.lotNumber} | Planter: ${s.planterId} | Price: ₹${s.finalPrice}`).join('\n');
+
+    const mailOptions = {
+        from: 'sajojoseph.sb@gmail.com',
+        to: 'sajojoseph.sb@gmail.com',
+        subject: `📊 Full Daily Auction Report - ${new Date().toLocaleDateString()}`,
+        text: `Daily Summary:\n\nTotal Sales: ${dailySales.length}\n\nDetails:\n${reportTable}`
+    };
+
+    transporter.sendMail(mailOptions);
+    console.log("Daily Report Sent to Admin");
+});
