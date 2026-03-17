@@ -10,7 +10,7 @@ app.use(express.json());
 // Health check route
 app.get("/health", (req, res) => res.send("OK"));
 
-// Database connection with auto-retry
+// Database connection with auto-retry and detailed logging
 async function connectDB() {
   try {
     await mongoose.connect(process.env.DATABASE_URL, {
@@ -19,7 +19,8 @@ async function connectDB() {
     });
     console.log("✅ Database connected successfully");
   } catch (err) {
-    console.error("❌ DB connection failed, retrying in 5s...");
+    console.error("❌ DB connection failed:", err.message);
+    console.log("Retrying in 5 seconds...");
     setTimeout(connectDB, 5000);
   }
 }
@@ -28,7 +29,20 @@ connectDB();
 // Global error handler
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err.stack);
-  res.status(500).send("Something broke!");
+  res.status(500).json({ error: "Internal Server Error" });
+});
+
+// Graceful shutdown (important for Render restarts)
+process.on("SIGINT", async () => {
+  console.log("🔻 Shutting down gracefully...");
+  await mongoose.disconnect();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  console.log("🔻 Render is stopping the service...");
+  await mongoose.disconnect();
+  process.exit(0);
 });
 
 // Port binding (Render requires process.env.PORT)
