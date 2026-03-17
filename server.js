@@ -1,54 +1,38 @@
-const express = require('express');
+require("dotenv").config();
+const express = require("express");
+const mongoose = require("mongoose");
+
 const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, { cors: { origin: "*" } });
-const mongoose = require('mongoose');
 
-// 1. Database Connection
-mongoose.connect("mongodb+srv://sajojosephsb_db_user:Spices2026!@cluster0.o3aaq1h.mongodb.net/auction")
-    .then(() => console.log("🚀 MongoDB Connected"));
+// Middleware
+app.use(express.json());
 
-// 2. User Schema
-const User = mongoose.model('User', new mongoose.Schema({
-    userId: { type: String, unique: true },
-    phone: { type: String, unique: true },
-    password: { type: String, required: true },
-    role: { type: String, required: true },
-    name: String,
-    status: { type: String, default: 'active' }
-}));
+// Health check route
+app.get("/health", (req, res) => res.send("OK"));
 
-// 3. Define the Gateway Routes (CRITICAL MISSING PART)
-const routes = {
-    admin: 'index.html',
-    trader: 'buyer.html',
-    company: 'company-dashboard.html',
-    quality: 'colour-check.html',
-    planter: 'planter-portal.html'
-};
-
-// 4. Login Logic
-io.on('connection', (socket) => {
-    socket.on('attemptLogin', async ({ loginId, password }) => {
-        try {
-            const user = await User.findOne({ 
-                $or: [{ userId: loginId }, { phone: loginId }], 
-                password: password 
-            });
-
-            if (user && user.status === 'active') {
-                socket.emit('loginResponse', { 
-                    success: true, 
-                    target: routes[user.role],
-                    user: { name: user.name || user.userId, role: user.role } 
-                });
-            } else {
-                socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
-            }
-        } catch (err) {
-            socket.emit('loginResponse', { success: false, message: "Server Error" });
-        }
+// Database connection with auto-retry
+async function connectDB() {
+  try {
+    await mongoose.connect(process.env.DATABASE_URL, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
     });
+    console.log("✅ Database connected successfully");
+  } catch (err) {
+    console.error("❌ DB connection failed, retrying in 5s...");
+    setTimeout(connectDB, 5000);
+  }
+}
+connectDB();
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err.stack);
+  res.status(500).send("Something broke!");
 });
 
-http.listen(process.env.PORT || 10000, () => console.log('Server Live'));
+// Port binding (Render requires process.env.PORT)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
