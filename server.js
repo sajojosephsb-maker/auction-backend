@@ -1,52 +1,44 @@
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
-
 const app = express();
+const http = require("http").Server(app);
+const io = require("socket.io")(http, { cors: { origin: "*" } });
 
-// Middleware
 app.use(express.json());
 
-// Health check route
-app.get("/health", (req, res) => res.send("OK"));
+// 1. Database Connection
+mongoose.connect(process.env.DATABASE_URL)
+    .then(() => console.log("✅ Database connected successfully"));
 
-// Database connection with auto-retry and detailed logging
-async function connectDB() {
-  try {
-    await mongoose.connect(process.env.DATABASE_URL, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+// 2. User Schema
+const User = mongoose.model('User', new mongoose.Schema({
+    userId: { type: String, unique: true },
+    password: { type: String, required: true },
+    role: { type: String, required: true },
+    status: { type: String, default: 'active' }
+}));
+
+// 3. Login Logic
+io.on('connection', (socket) => {
+    socket.on('attemptLogin', async ({ loginId, password }) => {
+        try {
+            const user = await User.findOne({ userId: loginId, password: password });
+            if (user && user.status === 'active') {
+                const routes = {
+                    admin: 'index.html',
+                    trader: 'buyer.html',
+                    planter: 'planter-portal.html'
+                };
+                socket.emit('loginResponse', { success: true, target: routes[user.role] });
+            } else {
+                socket.emit('loginResponse', { success: false, message: "Invalid Credentials" });
+            }
+        } catch (err) {
+            socket.emit('loginResponse', { success: false, message: "Server Error" });
+        }
     });
-    console.log("✅ Database connected successfully");
-  } catch (err) {
-    console.error("❌ DB connection failed:", err.message);
-    console.log("Retrying in 5 seconds...");
-    setTimeout(connectDB, 5000);
-  }
-}
-connectDB();
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err.stack);
-  res.status(500).json({ error: "Internal Server Error" });
 });
 
-// Graceful shutdown (important for Render restarts)
-process.on("SIGINT", async () => {
-  console.log("🔻 Shutting down gracefully...");
-  await mongoose.disconnect();
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
-  console.log("🔻 Render is stopping the service...");
-  await mongoose.disconnect();
-  process.exit(0);
-});
-
-// Port binding (Render requires process.env.PORT)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+http.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
